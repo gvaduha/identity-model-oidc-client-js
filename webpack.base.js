@@ -3,7 +3,9 @@ function createWebpackConfig(options) {
   return {
     mode: options.mode,
     entry: options.entry,
-    output: options.output,
+    // webpack 4 defaults to md4, which OpenSSL 3 (Node >= 17) rejects
+    // with ERR_OSSL_EVP_UNSUPPORTED; sha256 works on every Node version
+    output: Object.assign({ hashFunction: 'sha256' }, options.output),
     plugins: options.plugins,
     node: {
       // crypto-js probes require('crypto') for Node; browsers use window.crypto,
