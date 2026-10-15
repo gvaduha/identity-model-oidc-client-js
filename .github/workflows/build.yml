@@ -33,7 +33,17 @@ jobs:
         run: npm audit --omit=dev --audit-level=low
 
       - name: Audit all dependencies
-        run: npm audit --audit-level=low
+        run: |
+          npm audit --json > audit.json || true
+          node -e "
+            const r = require('./audit.json'); const v = r.vulnerabilities || {};
+            for (const [name, x] of Object.entries(v)) {
+              const via = x.via.map(e => typeof e === 'string' ? e : e.source + ' ' + e.title).join('; ');
+              console.log('::warning title=npm audit ' + x.severity + '::' + name + ' ' + x.range + ' <- ' + via + (x.fixAvailable ? ' (fix available)' : ''));
+            }
+            console.log('total', JSON.stringify(r.metadata.vulnerabilities));
+            if (Object.keys(v).length) process.exit(1);
+          "
 
       - run: npm test
 
