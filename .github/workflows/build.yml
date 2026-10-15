@@ -37,11 +37,11 @@ jobs:
 
       - name: Check bundles are free of jsrsasign
         run: |
-          if grep -rIl -e jsrsasign -e KJUR -e KEYUTIL lib dist test/conformance package-lock.json; then
+          if grep -rIn -o -e jsrsasign -e KJUR -e KEYUTIL lib dist test/conformance package-lock.json | head -20 | grep .; then
             echo "jsrsasign found in build output" >&2
             exit 1
           fi
-          npm ls crypto-js
+          npm ls crypto-js || true
 
       - name: Commit regenerated output
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'

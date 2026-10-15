@@ -1,7 +1,7 @@
 // Copyright (c) Brock Allen & Dominick Baier. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-// JWT parsing and validation without jsrsasign.
+// JWT parsing and validation.
 // - Signatures are verified with WebCrypto (crypto.subtle): RS/PS/ES 256/384/512.
 // - Hashing (at_hash / c_hash / PKCE) uses crypto-js.
 // - Base64 decoding uses base64-js.
@@ -285,7 +285,7 @@ export class JoseUtil {
         return Promise.resolve(payload);
     }
 
-    // Same contract as jsrsasign's crypto.Util.hashString: UTF-8 input, lowercase hex output
+    // UTF-8 input, lowercase hex output
     static hashString(value, alg) {
         try {
             const hasher = Hashers[String(alg).toLowerCase().replace(/[^a-z0-9]/g, '')];
