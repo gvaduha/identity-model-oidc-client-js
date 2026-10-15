@@ -20,8 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # webpack.base.js maps md4 to sha256, so current Node works; serialize-javascript 7
-      # (security fix, used by the minifier) needs Node >= 20
+      # webpack 5 / Babel 7 / mocha 11 toolchain; building needs Node >= 20
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -33,12 +32,15 @@ jobs:
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=low
 
-      - name: Audit all dependencies (report only)
-        run: npm audit || true
+      - name: Audit all dependencies
+        run: npm audit --audit-level=low
 
       - run: npm test
 
       - run: npm run build
+
+      - name: Check bundle exports
+        run: node test/bundle/exports.js
 
       - name: Refresh conformance test copy
         run: cp dist/oidc-client.js test/conformance/Oidc-Client-Conformance/Oidc-Client-Conformance/oidc-client.js
@@ -83,3 +85,4 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm test
       - run: npm run build
+      - run: node test/bundle/exports.js
