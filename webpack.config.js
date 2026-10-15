@@ -8,8 +8,10 @@ const path = require('path');
 const TerserPlugin = require('terser-webpack-plugin');
 
 const npmEntry = './index.js';
-// Replaces babel-polyfill (core-js 2 + regenerator) of the old classic build
-const classicEntry = ['core-js/stable', 'regenerator-runtime/runtime', npmEntry];
+// Same polyfill set babel-polyfill (core-js 2 shim + regenerator) gave the old classic build:
+// ECMAScript features plus the timers/immediate/dom-collections web shims
+const classicEntry = ['core-js/es', 'core-js/web/timers', 'core-js/web/immediate',
+    'core-js/web/dom-collections', 'regenerator-runtime/runtime', npmEntry];
 const slimEntry = ['./polyfills.js', npmEntry];
 
 function config({ entry, filename, dir, library, minify }) {
