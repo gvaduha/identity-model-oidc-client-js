@@ -26,4 +26,5 @@ oidc(url, app);
 
 console.log("listening on " + url);
 //open(url);
-app.listen(port);
+// bind to loopback only: oidc.js is a mock IdP that signs tokens for any caller
+app.listen(port, "127.0.0.1");

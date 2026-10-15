@@ -45,7 +45,21 @@ export class UrlUtility {
 
         var counter = 0;
         while (m = regex.exec(value)) {
-            params[decodeURIComponent(m[1])] = decodeURIComponent(m[2].replace(/\+/g, ' '));
+            var key, val;
+            try {
+                key = decodeURIComponent(m[1]);
+                val = decodeURIComponent(m[2].replace(/\+/g, ' '));
+            }
+            catch (e) {
+                Log.error("UrlUtility.parseUrlFragment: response contains malformed URL encoding", value);
+                return {
+                    error: "Response contains malformed URL encoding"
+                };
+            }
+            // never let a response URL write to the object prototype
+            if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+                params[key] = val;
+            }
             if (counter++ > 50) {
                 Log.error("UrlUtility.parseUrlFragment: response exceeded expected number of parameters", value);
                 return {

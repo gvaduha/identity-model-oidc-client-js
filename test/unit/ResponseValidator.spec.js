@@ -537,6 +537,17 @@ describe("ResponseValidator", function () {
 
     describe("_mergeClaims", function () {
 
+        it("should ignore prototype keys from user info", function () {
+
+            var c1 = { a: 'apple' };
+            var c2 = JSON.parse('{"__proto__": {"isAdmin": true}, "constructor": "x", "b": "banana"}');
+
+            var result = subject._mergeClaims(c1, c2);
+            result.should.deep.equal({ a: 'apple', b: 'banana' });
+            expect(result.isAdmin).to.be.undefined;
+            expect({}.isAdmin).to.be.undefined;
+        });
+
         it("should merge claims", function () {
 
             var c1 = { a: 'apple', b: 'banana' };
@@ -733,6 +744,17 @@ describe("ResponseValidator", function () {
 
         });
 
+    });
+
+    describe("_filterByAlg", function () {
+
+        it("should match RSA keys for RS and PS algorithms", function () {
+            const keys = [{ kty: 'RSA', kid: 'r' }, { kty: 'EC', kid: 'e' }];
+            subject._filterByAlg(keys, 'RS256').should.deep.equal([{ kty: 'RSA', kid: 'r' }]);
+            subject._filterByAlg(keys, 'PS256').should.deep.equal([{ kty: 'RSA', kid: 'r' }]);
+            subject._filterByAlg(keys, 'ES256').should.deep.equal([{ kty: 'EC', kid: 'e' }]);
+            subject._filterByAlg(keys, 'HS256').should.deep.equal([]);
+        });
     });
 
     describe("_getSigningKeyForJwt", function () {

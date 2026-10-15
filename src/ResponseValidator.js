@@ -8,6 +8,9 @@ import { TokenClient } from './TokenClient.js';
 import { ErrorResponse } from './ErrorResponse.js';
 import { JoseUtil } from './JoseUtil.js';
 
+// Keys that must never be copied from server responses onto plain objects
+const UnsafeKeys = ["__proto__", "constructor", "prototype"];
+
 const ProtocolClaims = ["nonce", "at_hash", "iat", "nbf", "exp", "aud", "iss", "c_hash"];
 
 export class ResponseValidator {
@@ -176,6 +179,9 @@ export class ResponseValidator {
         var result = Object.assign({}, claims1);
 
         for (let name in claims2) {
+            if (UnsafeKeys.indexOf(name) >= 0) {
+                continue;
+            }
             var values = claims2[name];
             if (!Array.isArray(values)) {
                 values = [values];
@@ -260,7 +266,9 @@ export class ResponseValidator {
         return this._tokenClient.exchangeCode(request).then(tokenResponse => {
             
             for(var key in tokenResponse) {
-                response[key] = tokenResponse[key];
+                if (UnsafeKeys.indexOf(key) < 0) {
+                    response[key] = tokenResponse[key];
+                }
             }
 
             if (response.id_token) {
@@ -403,7 +411,7 @@ export class ResponseValidator {
             kty = "RSA";
         }
         else if (alg.startsWith("PS")) {
-            kty = "PS";
+            kty = "RSA";
         }
         else if (alg.startsWith("ES")) {
             kty = "EC";

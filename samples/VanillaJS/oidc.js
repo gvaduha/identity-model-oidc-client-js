@@ -89,6 +89,24 @@ function genIdToken(aud, nonce, access_token) {
     return input + "." + base64url(signature);
 }
 
+// This mock IdP issues tokens to anyone, so only redirect back to this sample's own origin
+function isAllowedRedirect(url) {
+    if (typeof url !== "string") {
+        return false;
+    }
+    try {
+        return new URL(url).origin === new URL(metadata.issuer).origin;
+    }
+    catch (e) {
+        return false;
+    }
+}
+
+function addQueryParam(url, name, value) {
+    url += url.indexOf("?") < 0 ? "?" : "&";
+    return url + encodeURIComponent(name) + "=" + encodeURIComponent(value);
+}
+
 function isOidc(response_type) {
     var result = response_type.split(/\s+/g).filter(function(item) {
         return item === "id_token";
@@ -137,6 +155,10 @@ module.exports = function(baseUrl, app) {
         var response_type = req.query.response_type;
 
         var url = req.query.redirect_uri;
+        if (!isAllowedRedirect(url)) {
+            res.status(400).send("invalid redirect_uri");
+            return;
+        }
         
         var state = req.query.state;
         if (state) {
@@ -168,9 +190,13 @@ module.exports = function(baseUrl, app) {
     app.get(endSessionPath, function(req, res) {
         var url = req.query.post_logout_redirect_uri;
         if (url) {
+            if (!isAllowedRedirect(url)) {
+                res.status(400).send("invalid post_logout_redirect_uri");
+                return;
+            }
             var state = req.query.state;
             if (state) {
-                url += "?state=" + state;
+                url = addQueryParam(url, "state", state);
             }
             res.redirect(url);
         }

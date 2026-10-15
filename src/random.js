@@ -1,8 +1,21 @@
+import { Log } from './Log.js';
+
 /**
  * Generates RFC4122 version 4 guid ()
  */
 
-var crypto = (typeof window !== 'undefined') ? (window.crypto || window.msCrypto) : null;
+function getCrypto() {
+    if (typeof window !== 'undefined' && (window.crypto || window.msCrypto)) {
+        return window.crypto || window.msCrypto;
+    }
+    // workers, Node >= 19, React Native with a getRandomValues polyfill
+    if (typeof globalThis !== 'undefined' && globalThis.crypto) {
+        return globalThis.crypto;
+    }
+    return null;
+}
+
+var crypto = getCrypto();
 
 function _cryptoUuidv4() {
   return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
@@ -16,9 +29,15 @@ function _uuidv4() {
   )
 }
 
+var warned = false;
+
 export default function random() {
-  var hasCrypto = crypto != 'undefined' && crypto !== null;
-  var hasRandomValues = hasCrypto && (typeof(crypto.getRandomValues) != 'undefined');  
+  var hasRandomValues = !!crypto && typeof crypto.getRandomValues === 'function';
+  if (!hasRandomValues && !warned) {
+    warned = true;
+    // state, nonce and PKCE code_verifier are built from this value
+    Log.warn("random: crypto.getRandomValues is not available; falling back to Math.random, which is not cryptographically secure");
+  }
   var uuid = hasRandomValues ? _cryptoUuidv4 : _uuidv4;
   return uuid().replace(/-/g, '');
 }
