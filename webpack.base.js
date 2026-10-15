@@ -6,7 +6,9 @@ function createWebpackConfig(options) {
     output: options.output,
     plugins: options.plugins,
     node: {
-      fs: 'empty', // Because of jsrsasign usage of fs
+      // crypto-js probes require('crypto') for Node; browsers use window.crypto,
+      // so don't let webpack bundle the crypto-browserify polyfill
+      crypto: 'empty',
       buffer: 'empty'
     },
     module: {
