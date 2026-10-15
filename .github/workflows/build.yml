@@ -55,3 +55,20 @@ jobs:
             git commit -m "Rebuild lib/ and dist/"
             git push
           fi
+
+  # Make sure the toolchain also works on current Node (OpenSSL 3). No commit here.
+  build-current-node:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
