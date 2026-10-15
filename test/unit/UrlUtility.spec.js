@@ -74,6 +74,17 @@ describe("UrlUtility", function() {
             let result = UrlUtility.parseUrlFragment("");
             result.should.deep.equal({});
         });
+
+        it("should ignore prototype keys", function() {
+            let result = UrlUtility.parseUrlFragment("#a=apple&__proto__=x&constructor=y&prototype=z");
+            result.should.deep.equal({ a: "apple" });
+            Object.getPrototypeOf(result).should.equal(Object.prototype);
+        });
+
+        it("should return error for malformed URL encoding", function() {
+            let result = UrlUtility.parseUrlFragment("#a=apple&b=%E0%A4%A");
+            result.should.have.property("error");
+        });
     });
 
 });

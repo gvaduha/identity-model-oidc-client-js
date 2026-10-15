@@ -20,13 +20,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # gulp 4 / webpack 4 / babel 6 toolchain: Node 16 avoids the OpenSSL 3 md4 error in webpack 4
+      # webpack.base.js maps md4 to sha256, so current Node works; serialize-javascript 7
+      # (security fix, used by the minifier) needs Node >= 20
       - uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: 22
 
       # npm install (not ci) so the lockfile is regenerated after dependency changes
       - run: npm install --no-audit --no-fund
+
+      # Runtime dependencies (what consumers install) must have no known vulnerabilities
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=low
+
+      - name: Audit all dependencies (report only)
+        run: npm audit || true
 
       - run: npm test
 
@@ -56,14 +64,17 @@ jobs:
             git push
           fi
 
-  # Make sure the toolchain also works on current Node (OpenSSL 3). No commit here.
+  # Make sure the toolchain also works on Windows and on the oldest supported Node. No commit here.
   build-current-node:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: [22]
+        include:
+          - os: windows-latest
+            node: 22
+          - os: ubuntu-latest
+            node: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
