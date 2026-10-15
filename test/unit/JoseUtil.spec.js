@@ -1,24 +1,29 @@
 // Copyright (c) Brock Allen & Dominick Baier. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-import { JoseUtil as JoseUtilRsa } from '../../src/JoseUtilRsa';
-import { JoseUtil as JoseUtilJsrsasign } from '../../src/JoseUtil';
+import { JoseUtil } from '../../src/JoseUtil';
 import { Log } from '../../src/Log';
 
-// Node.js does not provide global atob/btoa functions that are widely supported by browsers (incl IE10)
-// https://caniuse.com/#feat=atob-btoa
-global.atob = (val) => { return Buffer.from(val, 'base64') };
-global.btoa = (val) => { return Buffer.from(val).toString('base64') };
+// Signature validation uses WebCrypto; Node >= 19 exposes it as globalThis.crypto
+import { webcrypto } from 'crypto';
+if (!global.crypto) {
+    global.crypto = webcrypto;
+}
 
 import chai from 'chai';
 chai.should();
 let expect = chai.expect;
 
-[JoseUtilJsrsasign, JoseUtilRsa].forEach(JoseUtil => {
-    const isRSA = JoseUtil === JoseUtilRsa;
-    const describeStr = `JoseUtil (${isRSA ? 'rsa' : 'jsrsasign'})`;
+function bytesToB64u(bytes) {
+    return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
-    describe(describeStr, function () {
+function strToB64u(s) {
+    return bytesToB64u(Buffer.from(s, 'utf8'));
+}
+
+{
+    describe("JoseUtil", function () {
 
         let jwt;
         let jwtFromRsa;
@@ -113,17 +118,15 @@ let expect = chai.expect;
 
         describe("validateJwt", function () {
 
-            if(!isRSA) {
-                it("should validate from RSA X509 key (jsrsasign only)", function (done, fail) {
-                    delete rsaKey.n;
-                    delete rsaKey.e;
+            it("should validate from RSA X509 key", function (done) {
+                delete rsaKey.n;
+                delete rsaKey.e;
 
-                    JoseUtil.validateJwt(jwtFromRsa, rsaKey, expectedIssuer, expectedAudience, 0, expectedNow).then(()=>{
-                        done();
-                    });
-
+                JoseUtil.validateJwt(jwtFromRsa, rsaKey, expectedIssuer, expectedAudience, 0, expectedNow).then(()=>{
+                    done();
                 });
-            }
+
+            });
 
             it("should validate from RSA exponent and modulus", function (done) {
 
@@ -255,6 +258,89 @@ let expect = chai.expect;
 
         });
 
-    });
-});
+        describe("validateJwt signature algorithms", function () {
 
+            const subtle = global.crypto.subtle;
+
+            function sign(alg, keyAlg, signAlg) {
+                const now = parseInt(Date.now() / 1000);
+                const header = strToB64u(JSON.stringify({ alg: alg, typ: "JWT" }));
+                const payload = strToB64u(JSON.stringify({ iss: expectedIssuer, aud: expectedAudience, iat: now, exp: now + 300 }));
+                const input = header + "." + payload;
+                return subtle.generateKey(keyAlg, true, ["sign", "verify"]).then(pair => {
+                    return Promise.all([
+                        subtle.sign(signAlg, pair.privateKey, Buffer.from(input, "ascii")),
+                        subtle.exportKey("jwk", pair.publicKey)
+                    ]).then(([sig, jwk]) => ({ jwt: input + "." + bytesToB64u(new Uint8Array(sig)), jwk: jwk }));
+                });
+            }
+
+            const rsaGen = { modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]) };
+            const cases = [
+                ["RS384", Object.assign({ name: "RSASSA-PKCS1-v1_5", hash: "SHA-384" }, rsaGen), { name: "RSASSA-PKCS1-v1_5" }],
+                ["PS256", Object.assign({ name: "RSA-PSS", hash: "SHA-256" }, rsaGen), { name: "RSA-PSS", saltLength: 32 }],
+                ["ES256", { name: "ECDSA", namedCurve: "P-256" }, { name: "ECDSA", hash: "SHA-256" }],
+                ["ES384", { name: "ECDSA", namedCurve: "P-384" }, { name: "ECDSA", hash: "SHA-384" }],
+                ["ES512", { name: "ECDSA", namedCurve: "P-521" }, { name: "ECDSA", hash: "SHA-512" }]
+            ];
+
+            cases.forEach(([alg, keyAlg, signAlg]) => {
+                it("should validate " + alg, function () {
+                    this.timeout(10000);
+                    return sign(alg, keyAlg, signAlg).then(({ jwt, jwk }) =>
+                        JoseUtil.validateJwt(jwt, jwk, expectedIssuer, expectedAudience));
+                });
+
+                it("should reject a tampered " + alg + " token", function () {
+                    this.timeout(10000);
+                    return sign(alg, keyAlg, signAlg).then(({ jwt, jwk }) => {
+                        const parts = jwt.split(".");
+                        const body = JSON.parse(Buffer.from(parts[1], "base64").toString());
+                        body.sub = "attacker";
+                        const forged = parts[0] + "." + strToB64u(JSON.stringify(body)) + "." + parts[2];
+                        return JoseUtil.validateJwt(forged, jwk, expectedIssuer, expectedAudience).then(
+                            () => { throw new Error("should have failed"); },
+                            e => { e.message.should.contain("signature"); });
+                    });
+                });
+            });
+
+            it("should reject alg none", function () {
+                const now = parseInt(Date.now() / 1000);
+                const jwt = strToB64u(JSON.stringify({ alg: "none" })) + "." +
+                    strToB64u(JSON.stringify({ iss: expectedIssuer, aud: expectedAudience, iat: now, exp: now + 300 })) + ".";
+                return JoseUtil.validateJwt(jwt, rsaKey, expectedIssuer, expectedAudience).then(
+                    () => { throw new Error("should have failed"); },
+                    e => { e.message.should.contain("signature"); });
+            });
+
+            it("should reject HS256 even with an RSA key", function () {
+                const now = parseInt(Date.now() / 1000);
+                const jwt = strToB64u(JSON.stringify({ alg: "HS256" })) + "." +
+                    strToB64u(JSON.stringify({ iss: expectedIssuer, aud: expectedAudience, iat: now, exp: now + 300 })) + ".AAAA";
+                return JoseUtil.validateJwt(jwt, rsaKey, expectedIssuer, expectedAudience).then(
+                    () => { throw new Error("should have failed"); },
+                    e => { e.message.should.contain("signature"); });
+            });
+        });
+
+        describe("hashString / hexToBase64Url", function () {
+
+            it("should produce the RFC 7636 S256 code challenge", function () {
+                const hash = JoseUtil.hashString("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", "SHA256");
+                JoseUtil.hexToBase64Url(hash).should.equal("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+            });
+
+            it("should return lowercase hex for sha256/sha384/sha512", function () {
+                JoseUtil.hashString("abc", "sha256").should.equal("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+                JoseUtil.hashString("abc", "sha384").should.have.length(96);
+                JoseUtil.hashString("abc", "sha512").should.have.length(128);
+            });
+
+            it("should return undefined for unsupported algorithms", function () {
+                expect(JoseUtil.hashString("abc", "md5")).to.be.undefined;
+            });
+        });
+
+    });
+}

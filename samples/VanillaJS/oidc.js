@@ -1,10 +1,15 @@
 // Copyright (c) Brock Allen & Dominick Baier. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
-var jsrsasign = require('jsrsasign');
-var rsaKey = jsrsasign.KEYUTIL.generateKeypair("RSA", 1024);
-var e = jsrsasign.hextob64u(rsaKey.pubKeyObj.e.toString(16));
-var n = jsrsasign.hextob64u(rsaKey.pubKeyObj.n.toString(16));
+var crypto = require('crypto');
+var rsaKey = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+var publicJwk = rsaKey.publicKey.export({ format: "jwk" });
+var e = publicJwk.e;
+var n = publicJwk.n;
+
+function base64url(buf) {
+    return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
 var path = '/oidc';
 var metadataPath = path + '/.well-known/openid-configuration';
@@ -51,10 +56,8 @@ function genAccessToken() {
 }
 
 function hashAccessToken(access_token) {
-    var hash = jsrsasign.crypto.Util.hashString(access_token, "sha256")
-    var left = hash.substr(0, hash.length / 2);
-    var left_b64u = jsrsasign.hextob64u(left);
-    return left_b64u;
+    var hash = crypto.createHash("sha256").update(access_token, "utf8").digest();
+    return base64url(hash.subarray(0, hash.length / 2));
 }
 
 function genIdToken(aud, nonce, access_token) {
@@ -81,7 +84,9 @@ function genIdToken(aud, nonce, access_token) {
         }
     }
 
-    return jsrsasign.jws.JWS.sign(null, { alg: "RS256", kid: "1" }, payload, rsaKey.prvKeyObj);
+    var input = base64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: "1" })) + "." + base64url(JSON.stringify(payload));
+    var signature = crypto.createSign("RSA-SHA256").update(input).sign(rsaKey.privateKey);
+    return input + "." + base64url(signature);
 }
 
 function isOidc(response_type) {

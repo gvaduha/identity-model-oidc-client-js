@@ -1,0 +1,57 @@
+name: build
+
+# Installs, tests and rebuilds the library. On a push, regenerated lib/, dist/,
+# package-lock.json and the conformance copy are committed back to the branch,
+# so consumers installing from git get bundles that match src/.
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore: ['**.md']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # gulp 4 / webpack 4 / babel 6 toolchain: Node 16 avoids the OpenSSL 3 md4 error in webpack 4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 16
+
+      # npm install (not ci) so the lockfile is regenerated after dependency changes
+      - run: npm install --no-audit --no-fund
+
+      - run: npm test
+
+      - run: npm run build
+
+      - name: Refresh conformance test copy
+        run: cp dist/oidc-client.js test/conformance/Oidc-Client-Conformance/Oidc-Client-Conformance/oidc-client.js
+
+      - name: Check bundles are free of jsrsasign
+        run: |
+          if grep -rIn -o -e jsrsasign -e KJUR -e KEYUTIL lib dist test/conformance package-lock.json | head -20 | grep .; then
+            echo "jsrsasign found in build output" >&2
+            exit 1
+          fi
+          npm ls crypto-js || true
+
+      - name: Commit regenerated output
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib dist package-lock.json version.js test/conformance
+          if git diff --cached --quiet; then
+            echo "Build output already up to date"
+          else
+            git commit -m "Rebuild lib/ and dist/"
+            git push
+          fi
