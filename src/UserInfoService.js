@@ -119,12 +119,17 @@ export class UserInfoService {
     }
 
     _filterByAlg(keys, alg) {
+        if (!JoseUtil.isAllowedSigningAlg(alg)) {
+            Log.error("UserInfoService._filterByAlg: alg not allowed: ", alg);
+            return [];
+        }
         var kty = null;
         if (alg.startsWith("RS")) {
             kty = "RSA";
         }
         else if (alg.startsWith("PS")) {
-            kty = "PS";
+            // RSA-PSS keys are kty "RSA" (RFC 7518)
+            kty = "RSA";
         }
         else if (alg.startsWith("ES")) {
             kty = "EC";
