@@ -16,6 +16,22 @@ import { toByteArray } from 'base64-js';
 
 const AllowedSigningAlgs = ['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512'];
 
+// Only asymmetric signatures from the allowlist are accepted. "none" (unsigned) and HS*
+// (which would treat the public key as an HMAC secret) are rejected explicitly, whatever
+// their case, so this does not depend on the allowlist alone.
+function assertAllowedAlg(alg) {
+    if (typeof alg !== 'string' || !alg) {
+        throw new Error('Missing or invalid JWT alg');
+    }
+    if (alg.toLowerCase() === 'none') {
+        throw new Error('Unsigned JWT (alg "none") is not allowed');
+    }
+    if (AllowedSigningAlgs.indexOf(alg) < 0) {
+        throw new Error('Invalid or unsupported JWT alg: ' + alg);
+    }
+    return alg;
+}
+
 const Hashers = { sha256: SHA256, sha384: SHA384, sha512: SHA512 };
 
 function b64ToBytes(s) {
@@ -166,8 +182,33 @@ export class JoseUtil {
         }
     }
 
+    static isAllowedSigningAlg(alg) {
+        try {
+            assertAllowedAlg(alg);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     static validateJwt(jwt, key, issuer, audience, clockSkew, now, timeInsensitive) {
         Log.debug("JoseUtil.validateJwt");
+
+        // Check the algorithm and signature presence before anything else, so an unsigned
+        // or downgraded token is rejected without its claims ever being considered
+        try {
+            const parts = typeof jwt === 'string' ? jwt.split('.') : [];
+            if (parts.length !== 3 || !parts[2]) {
+                throw new Error('JWT is not signed');
+            }
+            const alg = assertAllowedAlg(b64uToJson(parts[0]).alg);
+            if (key && key.alg && key.alg !== alg) {
+                throw new Error('JWT alg ' + alg + ' does not match key alg ' + key.alg);
+            }
+        } catch (e) {
+            Log.error("JoseUtil.validateJwt: " + (e && e.message));
+            return Promise.reject(new Error("signature validation failed: " + (e && e.message)));
+        }
 
         let resolved;
         try {
@@ -194,9 +235,10 @@ export class JoseUtil {
     static _verifySignature(jwt, resolved) {
         try {
             const parts = jwt.split('.');
-            const alg = b64uToJson(parts[0]).alg;
-            if (AllowedSigningAlgs.indexOf(alg) < 0) {
-                throw new Error('alg not allowed: ' + alg);
+            // checked again here so this path is safe on its own
+            const alg = assertAllowedAlg(b64uToJson(parts[0]).alg);
+            if (!parts[2]) {
+                throw new Error('JWT is not signed');
             }
             const p = algParams(alg);
             if (p.kty !== resolved.kty) {

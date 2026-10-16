@@ -406,6 +406,10 @@ export class ResponseValidator {
     }
 
     _filterByAlg(keys, alg){
+        if (!JoseUtil.isAllowedSigningAlg(alg)) {
+            Log.error("ResponseValidator._filterByAlg: alg not allowed: ", alg);
+            return [];
+        }
         var kty = null;
         if (alg.startsWith("RS")) {
             kty = "RSA";

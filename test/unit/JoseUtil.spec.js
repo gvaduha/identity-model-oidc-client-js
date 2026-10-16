@@ -314,6 +314,54 @@ function strToB64u(s) {
                     e => { e.message.should.contain("signature"); });
             });
 
+            function unsignedJwt(header, sig) {
+                const now = parseInt(Date.now() / 1000);
+                return strToB64u(JSON.stringify(header)) + "." +
+                    strToB64u(JSON.stringify({ iss: expectedIssuer, aud: expectedAudience, iat: now, exp: now + 300 })) + "." + (sig || "");
+            }
+
+            ["none", "None", "NONE", "nOnE"].forEach(alg => {
+                it("should reject alg " + alg + " with or without a signature part", function () {
+                    return Promise.all([unsignedJwt({ alg }), unsignedJwt({ alg }, "AAAA")].map(jwt =>
+                        JoseUtil.validateJwt(jwt, rsaKey, expectedIssuer, expectedAudience).then(
+                            () => { throw new Error("should have failed"); },
+                            e => { e.message.should.contain("signature"); })));
+                });
+            });
+
+            [undefined, "", 256, ["RS256"], "rs256", "RS256 ", "HS512"].forEach(alg => {
+                it("should reject alg " + JSON.stringify(alg), function () {
+                    return JoseUtil.validateJwt(unsignedJwt({ alg }, "AAAA"), rsaKey, expectedIssuer, expectedAudience).then(
+                        () => { throw new Error("should have failed"); },
+                        e => { e.message.should.contain("signature"); });
+                });
+            });
+
+            it("should reject an allowed alg with an empty signature", function () {
+                return JoseUtil.validateJwt(unsignedJwt({ alg: "RS256" }), rsaKey, expectedIssuer, expectedAudience).then(
+                    () => { throw new Error("should have failed"); },
+                    e => { e.message.should.contain("not signed"); });
+            });
+
+            it("should reject a token whose alg differs from the key's declared alg", function () {
+                this.timeout(10000);
+                const rsGen = Object.assign({ name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, rsaGen);
+                return sign("RS256", rsGen, { name: "RSASSA-PKCS1-v1_5" }).then(({ jwt, jwk }) => {
+                    jwk.alg = "PS256";
+                    return JoseUtil.validateJwt(jwt, jwk, expectedIssuer, expectedAudience).then(
+                        () => { throw new Error("should have failed"); },
+                        e => { e.message.should.contain("does not match key alg"); });
+                });
+            });
+
+            it("should report allowed algorithms", function () {
+                JoseUtil.isAllowedSigningAlg("RS256").should.equal(true);
+                JoseUtil.isAllowedSigningAlg("ES512").should.equal(true);
+                JoseUtil.isAllowedSigningAlg("none").should.equal(false);
+                JoseUtil.isAllowedSigningAlg("HS256").should.equal(false);
+                JoseUtil.isAllowedSigningAlg(undefined).should.equal(false);
+            });
+
             it("should reject HS256 even with an RSA key", function () {
                 const now = parseInt(Date.now() / 1000);
                 const jwt = strToB64u(JSON.stringify({ alg: "HS256" })) + "." +

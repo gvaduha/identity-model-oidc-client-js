@@ -755,6 +755,14 @@ describe("ResponseValidator", function () {
             subject._filterByAlg(keys, 'ES256').should.deep.equal([{ kty: 'EC', kid: 'e' }]);
             subject._filterByAlg(keys, 'HS256').should.deep.equal([]);
         });
+
+        it("should return no keys for alg none or a missing alg", function () {
+            const keys = [{ kty: 'RSA', kid: 'r' }, { kty: 'EC', kid: 'e' }];
+            subject._filterByAlg(keys, 'none').should.deep.equal([]);
+            subject._filterByAlg(keys, 'NONE').should.deep.equal([]);
+            subject._filterByAlg(keys, undefined).should.deep.equal([]);
+            subject._filterByAlg(keys, 'RSnone').should.deep.equal([]);
+        });
     });
 
     describe("_getSigningKeyForJwt", function () {

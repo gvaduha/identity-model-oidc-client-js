@@ -103,4 +103,21 @@ describe("UserInfoService", function() {
 
         });
     });
+
+    describe("_filterByAlg", function() {
+
+        it("should match RSA keys for RS and PS algorithms", function() {
+            const keys = [{ kty: 'RSA', kid: 'r' }, { kty: 'EC', kid: 'e' }];
+            subject._filterByAlg(keys, 'RS256').should.deep.equal([{ kty: 'RSA', kid: 'r' }]);
+            subject._filterByAlg(keys, 'PS384').should.deep.equal([{ kty: 'RSA', kid: 'r' }]);
+            subject._filterByAlg(keys, 'ES256').should.deep.equal([{ kty: 'EC', kid: 'e' }]);
+        });
+
+        it("should return no keys for alg none, HS* or a missing alg", function() {
+            const keys = [{ kty: 'RSA', kid: 'r' }, { kty: 'EC', kid: 'e' }];
+            subject._filterByAlg(keys, 'none').should.deep.equal([]);
+            subject._filterByAlg(keys, 'HS256').should.deep.equal([]);
+            subject._filterByAlg(keys, undefined).should.deep.equal([]);
+        });
+    });
 });
