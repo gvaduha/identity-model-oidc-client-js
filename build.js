@@ -7,7 +7,7 @@ const webpack = require('webpack');
 const pkg = require('./package.json');
 
 fs.writeFileSync(path.join(__dirname, 'version.js'),
-    'const Version = "' + pkg.version + '"; export {Version};');
+    'const Version = "' + pkg.version + '"; export {Version};\n');
 
 webpack(require('./webpack.config.js'), (err, stats) => {
     if (err) {
